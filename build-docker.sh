@@ -14,6 +14,7 @@ if ! ${DOCKER} ps >/dev/null; then
 	exit 1
 fi
 
+DEFAULT_CONFIG_FILE="${DIR}/default-config"
 CONFIG_FILE=""
 if [ -f "${DIR}/config" ]; then
 	CONFIG_FILE="${DIR}/config"
@@ -33,21 +34,18 @@ done
 # Ensure that the configuration file is an absolute path
 if test -x /usr/bin/realpath; then
 	CONFIG_FILE=$(realpath -s "$CONFIG_FILE" || realpath "$CONFIG_FILE")
+	DEFAULT_CONFIG_FILE=$(realpath -s "$DEFAULT_CONFIG_FILE" || realpath "$DEFAULT_CONFIG_FILE")
 fi
 
-# Ensure that the confguration file is present
-if test -z "${CONFIG_FILE}"; then
-	echo "Configuration file need to be present in '${DIR}/config' or path passed as parameter"
-	exit 1
-else
-	# shellcheck disable=SC1090
-	source ${CONFIG_FILE}
-fi
+# shellcheck disable=SC1090
+source ${DEFAULT_CONFIG_FILE}
+source ${CONFIG_FILE}
 
 # Convert paths to DOS format under Cygwin/MSYS2
 if test -x /usr/bin/cygpath; then
 	DIR=$(cygpath -da "$DIR")
 	CONFIG_FILE=$(cygpath -da "$CONFIG_FILE")
+	DEFAULT_CONFIG_FILE=$(cygpath -da "$DEFAULT_CONFIG_FILE")
 fi
 
 CONTAINER_NAME=${CONTAINER_NAME:-pigen_work}
@@ -83,6 +81,7 @@ ${DOCKER} build -t pi-gen "${DIR}"
 if [ "${CONTAINER_EXISTS}" != "" ]; then
 	trap 'echo "got CTRL+C... please wait 5s" && ${DOCKER} stop -t 5 ${CONTAINER_NAME}_cont' SIGINT SIGTERM
 	time ${DOCKER} run --rm --privileged \
+		--volume "${DEFAULT_CONFIG_FILE}":/default-config:ro \
 		--volume "${CONFIG_FILE}":/config:ro \
 		-e "GIT_HASH=${GIT_HASH}" \
 		--volumes-from="${CONTAINER_NAME}" --name "${CONTAINER_NAME}_cont" \
@@ -94,6 +93,7 @@ if [ "${CONTAINER_EXISTS}" != "" ]; then
 else
 	trap 'echo "got CTRL+C... please wait 5s" && ${DOCKER} stop -t 5 ${CONTAINER_NAME}' SIGINT SIGTERM
 	time ${DOCKER} run --name "${CONTAINER_NAME}" --privileged \
+		--volume "${DEFAULT_CONFIG_FILE}":/default-config:ro \
 		--volume "${CONFIG_FILE}":/config:ro \
 		-e "GIT_HASH=${GIT_HASH}" \
 		pi-gen \
